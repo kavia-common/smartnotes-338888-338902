@@ -20,9 +20,12 @@ $CONN -c "SELECT 1;"
 
 ---
 
-## Enabled extensions
+## Enabled extensions (verified)
+
+Verified in running DB (`myapp`):
 
 - `pg_trgm` (for fast partial-text search via trigram GIN indexes)
+- `pgcrypto` (for `gen_random_uuid()` defaults)
 
 ---
 
@@ -92,6 +95,70 @@ Uses `pg_trgm`:
 - `idx_note_tags_note_id` on `note_tags(note_id)`
 
 ---
+
+## Live DB verification (applied + checked)
+
+The schema described above is **present in the running PostgreSQL instance**.
+
+### Connection used
+
+```bash
+cd smartnotes-338888-338902/notes_database
+CONN="$(cat db_connection.txt)"
+```
+
+### Verified database identity
+
+```bash
+$CONN -c "SELECT current_database() as db, current_user as user, version();"
+-- db=myapp, user=appuser (PostgreSQL 16.x)
+```
+
+### Verified extensions
+
+```bash
+$CONN -c "SELECT extname FROM pg_extension ORDER BY extname;"
+-- pg_trgm, pgcrypto, plpgsql
+```
+
+### Verified tables present (public schema)
+
+```bash
+$CONN -c "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name;"
+-- note_tags, notes, tags
+```
+
+### Verified triggers present
+
+```bash
+$CONN -c "SELECT tgname, tab.relname AS table_name
+          FROM pg_trigger t
+          JOIN pg_class tab ON tab.oid=t.tgrelid
+          WHERE NOT t.tgisinternal
+            AND tab.relnamespace = 'public'::regnamespace
+          ORDER BY table_name, tgname;"
+-- notes_set_updated_at on notes
+-- tags_set_updated_at  on tags
+```
+
+### Verified indexes present
+
+```bash
+$CONN -c "SELECT indexname, indexdef FROM pg_indexes WHERE schemaname='public' ORDER BY indexname;"
+```
+
+Indexes found (matching this document):
+
+- `idx_notes_created_at`
+- `idx_notes_updated_at`
+- `idx_notes_pinned_sort`
+- `idx_notes_favorite`
+- `idx_notes_title_trgm`
+- `idx_notes_content_trgm`
+- `idx_tags_name_trgm`
+- `idx_note_tags_tag_id`
+- `idx_note_tags_note_id`
+- plus PK/unique indexes: `notes_pkey`, `tags_pkey`, `tags_name_unique`, `note_tags_pkey`
 
 ## Optional dev seed data
 
